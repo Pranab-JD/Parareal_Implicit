@@ -1,2 +1,2 @@
 # Parareal_Implicit
-Parareal with implicit solvers for test problems
+This code uses the Eigen library for matrices, vectors, and GMRes.
