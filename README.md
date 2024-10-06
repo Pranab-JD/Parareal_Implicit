@@ -1,8 +1,8 @@
 # Pararel Implicit
-This code uses the [[Eigen]](https://eigen.tuxfamily.org/index.php?title=Main_Page) library for matrices, vectors, and GMRes.
+This code uses the [Eigen](https://eigen.tuxfamily.org/index.php?title=Main_Page) library for matrices, vectors, and GMRes.
 
 ### Info on input arguments:
-Argument 1: The executable (program) to be run (./Parareal)
+Argument 1: The executable (program) to be run (./Parareal_Implicit)
 
 Argument 2: Grid points along X & Y (8 --> 2^8 x 2^8)
 
