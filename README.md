@@ -10,7 +10,7 @@ git clone https://gitlab.com/libeigen/eigen.git
 ``` shell
 git clone https://github.com/Pranab-JD/Parareal_Implicit.git
 ```
-Note: Eigen and Pararela Implicit should be in the same directory. 
+Note: Eigen and Parareal_Implicit should be in the same directory. 
 3. Create build directory
 ``` shell
 cd Parareal_Implicit
