@@ -21,7 +21,7 @@ bash ../compile.sh
 ```
 5. Run the code
 ``` shell
-bash ../run.sh
+bash ./run.sh
 ```
 
 ### Info on input arguments:
