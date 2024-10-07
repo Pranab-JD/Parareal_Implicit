@@ -12,8 +12,7 @@ git clone https://github.com/Pranab-JD/Parareal_Implicit.git
 ```
 3. Create build directory
 ``` shell
-cd Parareal_Implicit
-mkdir build && cd build
+cd Parareal_Implicit && mkdir build && cd build
 ```
 4. Compile the code
 ``` shell
