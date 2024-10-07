@@ -6,11 +6,10 @@ This code uses the [Eigen](https://eigen.tuxfamily.org/index.php?title=Main_Page
 ``` shell
 git clone https://gitlab.com/libeigen/eigen.git
 ```
-2. Install Parareal Implicit
+2. Install Parareal Implicit (Note: Eigen and Parareal_Implicit should be in the same directory)
 ``` shell
 git clone https://github.com/Pranab-JD/Parareal_Implicit.git
 ```
-Note: Eigen and Parareal_Implicit should be in the same directory. 
 3. Create build directory
 ``` shell
 cd Parareal_Implicit
