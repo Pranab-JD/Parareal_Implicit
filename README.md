@@ -20,7 +20,7 @@ bash ../compile.sh
 ```
 5. Run the code
 ``` shell
-bash ./run.sh
+./Parareal_Implicit 8 2.3 1e-10 16 "yes"
 ```
 
 ### Info on input arguments:
