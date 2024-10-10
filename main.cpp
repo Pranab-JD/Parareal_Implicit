@@ -74,7 +74,7 @@ int main(int argc, char** argv)
 
     //* Temporal parameters
     double dif_cfl = (dx*dx * dy*dy)/(2*dx*dx + 2*dy*dy);   // Diffusion CFL
-    double adv_cfl = dx*dy/(velocity * (dx + dy));          // Advection CFL
+    double adv_cfl = min(dx/velocity, dy/velocity);         // Advection CFL
     double dt = n_cfl*min(dif_cfl, adv_cfl);                // Step size
 
     double time = 0;                                        // Simulation time elapsed                          
@@ -160,7 +160,8 @@ int main(int argc, char** argv)
         }
         else
         {
-            cout << "Incorrect integrator. Please recheck!" << endl;
+            cout << "Incorrect integrator! Please recheck. Terminating simulations ... " << endl << endl;
+            return 1;
         }
 
         //? ----------------------------------------------- ?//
