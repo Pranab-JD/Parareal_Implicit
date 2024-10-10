@@ -33,9 +33,13 @@ int main(int argc, char** argv)
     double tol = atof(argv[3]);             // User-specified tolerance
     int num_time_steps = atoi(argv[4]);     // Final simulation time
     
+    string integrator = "Implicit_Euler";   // Integrator
+    if (argc >= 6)
+        integrator = argv[5];
+
     string movie = "no";                    // Default param = "no"
-    if (argc == 6)
-        movie = argv[5];                    // Set to "yes" to write data for plots/movie
+    if (argc == 7)
+        movie = argv[6];                    // Set to "yes" to write data for plots/movie
 
     int num_threads;                        // # of OpenMP threads
     #pragma omp parallel
@@ -81,10 +85,6 @@ int main(int argc, char** argv)
     cout << endl << "N = " << N << ", tol = " << tol << ", Time steps = " << num_time_steps << endl;
     cout << "N_cfl = " << n_cfl << ", CFL: " << min(dif_cfl, adv_cfl) << ", dt = " << dt << endl << endl;
 
-    //? Choose problem and integrator
-    string problem = "Diff_Adv_2D";
-    string integrator = "Implicit_Euler";
-
     //? Identity matrix
     Eigen::SparseMatrix<double> I_N(n, n);
     I_N.setIdentity();
@@ -104,8 +104,9 @@ int main(int argc, char** argv)
     RHS.Diffusion_matrix(Dif_xx, Dif_yy, I_N, A_dif);
     RHS.Advection_matrix(Adv_x, Adv_y, I_N, A_adv);
 
-    //? Add diffusion and advection matrices 
-    Eigen::SparseMatrix<double> A_diff_adv(N, N);
+    //? Choose problem
+    string problem = "Diff_Adv_2D";
+    Eigen::SparseMatrix<double> A_diff_adv(N, N);       //* Add diffusion and advection matrices 
     A_diff_adv = A_diff_adv + A_adv;
    
     //! Print the matrix (avoid doing this for large matrices)
@@ -143,7 +144,7 @@ int main(int argc, char** argv)
     LeXInt::timer time_loop;
     time_loop.start();
 
-    cout << "Running the 2D diffusion--advection probelm with the " << integrator << " integrator." << endl << endl;
+    cout << "Running the 2D diffusion--advection problem with the " << integrator << " integrator." << endl << endl;
 
     for (int nn = 0; nn < num_time_steps; nn++)
     {
