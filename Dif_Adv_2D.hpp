@@ -68,14 +68,14 @@ struct RHS_Dif_Adv_2D:public Problems_2D
         for (int i = 0; i < N; ++i) 
         {
             //* (ii, jj)
-            A_x.push_back(Eigen::Triplet<double>(i, i, -3.0));
-            A_y.push_back(Eigen::Triplet<double>(i, i, -3.0));
+            A_x.push_back(Eigen::Triplet<double>(i, i, -3.0/6.0));
+            A_y.push_back(Eigen::Triplet<double>(i, i, -3.0/6.0));
 
             //* (ii, jj - 1)
             if (i > 0) 
             {
-                A_x.push_back(Eigen::Triplet<double>(i, i - 1, -2.0));
-                A_y.push_back(Eigen::Triplet<double>(i, i - 1, -2.0));
+                A_x.push_back(Eigen::Triplet<double>(i, i - 1, -2.0/6.0));
+                A_y.push_back(Eigen::Triplet<double>(i, i - 1, -2.0/6.0));
             }
 
             //* (ii, jj + 1)
@@ -88,21 +88,21 @@ struct RHS_Dif_Adv_2D:public Problems_2D
             //* (ii, jj + 2)
             if (i < N - 2) 
             {
-                A_x.push_back(Eigen::Triplet<double>(i, i + 2, -1.0));
-                A_y.push_back(Eigen::Triplet<double>(i, i + 2, -1.0));
+                A_x.push_back(Eigen::Triplet<double>(i, i + 2, -1.0/6.0));
+                A_y.push_back(Eigen::Triplet<double>(i, i + 2, -1.0/6.0));
             }
         }
 
         //? PBC
-        A_x.push_back(Eigen::Triplet<double>(N - 2, 0, -1.0));
+        A_x.push_back(Eigen::Triplet<double>(N - 2, 0, -1.0/6.0));
         A_x.push_back(Eigen::Triplet<double>(N - 1, 0,  1.0));
-        A_x.push_back(Eigen::Triplet<double>(N - 1, 1, -1.0));
-        A_x.push_back(Eigen::Triplet<double>(0, N - 1, -2.0));
+        A_x.push_back(Eigen::Triplet<double>(N - 1, 1, -1.0/6.0));
+        A_x.push_back(Eigen::Triplet<double>(0, N - 1, -2.0/6.0));
 
-        A_y.push_back(Eigen::Triplet<double>(N - 2, 0, -1.0));
+        A_y.push_back(Eigen::Triplet<double>(N - 2, 0, -1.0/6.0));
         A_y.push_back(Eigen::Triplet<double>(N - 1, 0,  1.0));
-        A_y.push_back(Eigen::Triplet<double>(N - 1, 1, -1.0));
-        A_y.push_back(Eigen::Triplet<double>(0, N - 1, -2.0));
+        A_y.push_back(Eigen::Triplet<double>(N - 1, 1, -1.0/6.0));
+        A_y.push_back(Eigen::Triplet<double>(0, N - 1, -2.0/6.0));
         
         //* Set the values into the sparse matrices
         Adv_x.setFromTriplets(A_x.begin(), A_x.end());
