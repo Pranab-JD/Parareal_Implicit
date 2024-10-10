@@ -155,4 +155,19 @@ void axpby_Cpp(double a, double *x,
     }
 }
 
+//? u = ax + by + cz + dw + ev
+void axpby_Cpp(double a, double *x,
+                double b, double *y,
+                double c, double *z,
+                double d, double *w,
+                double e, double *v, 
+                          double *u, size_t N)
+{
+    #pragma omp parallel for
+    for (int ii = 0; ii < N; ii++)
+    {
+        u[ii] = (a * x[ii]) + (b * y[ii]) + (c * z[ii]) + (d * w[ii]) + (e * v[ii]);
+    }
+}
+
 //! ======================================================================================== !//
