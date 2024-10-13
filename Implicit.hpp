@@ -63,7 +63,25 @@ void implicit_Euler(const Eigen::SparseMatrix<double>& A,        //* Matrix A (i
     GMRes(LHS_matrix, rhs_vector, u, tol, iters);
 }
 
-void CN()
+void CN(const Eigen::SparseMatrix<double>& A,              //* Matrix A (input)
+              Eigen::VectorXd& u,                          //* Solution vector x (output)
+              double& tol,                                 //* Desired accuracy (input)
+              double& dt,                                  //* Time step size
+              int& iters,                                  //* Number of iterations (output)
+              Eigen::SparseMatrix<double>& LHS_matrix,     //* LHS matrix (A in Ax = b) 
+              Eigen::VectorXd& rhs_vector                  //* RHS vector (b in Ax = b) 
+              )
 {
-    // TODO: Implement CN (the function declaration & parameters have to be similar to the previous one)
+    //? Create an identity matrix of same size as A
+    Eigen::SparseMatrix<double> I(A.rows(), A.rows());
+    I.setIdentity();
+
+    //* LHS matrix: (I - dt*A)
+    LHS_matrix = I - 0.5*dt*A;
+
+    //* RHS vector: u
+    rhs_vector = u + 0.5*dt*(A*u);
+
+    //? Solve using GMRes (Ax = b :: LHS_matrix * u = rhs_vector)
+    GMRes(LHS_matrix, rhs_vector, u, tol, iters);
 }
