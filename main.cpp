@@ -27,6 +27,7 @@ using namespace std;
 
 int main(int argc, char** argv)
 {
+    //? Input parameters
 
     int index = atoi(argv[1]);              // N = 2^index * 2^index
     double n_cfl = atof(argv[2]);           // dt = n_cfl * dt_cfl
@@ -48,6 +49,8 @@ int main(int argc, char** argv)
     //! Set GPU spport to false
     bool GPU_access = false;
 
+    //* ----------------------------------------------------------------- *//
+
     //* Initialise parameters
     int n = pow(2, index);                          // # grid points (1D)
     int N = n*n;                                    // # grid points (2D)
@@ -61,6 +64,7 @@ int main(int argc, char** argv)
     Eigen::VectorXd u_sol(N);                       // Solution vector 
 
     //* Set up X, Y arrays and initial condition
+    #pragma omp parallel for
     for (int ii = 0; ii < n; ii++)
     {
         X[ii] = xmin + ii*(xmax - xmin)/n;
@@ -70,7 +74,7 @@ int main(int argc, char** argv)
     //* Initialise additional parameters
     double dx = X[2] - X[1];                              // Grid spacing
     double dy = Y[2] - Y[1];                              // Grid spacing
-    double velocity = 10;                                   // Advection speed
+    double velocity = 40;                                   // Advection speed
 
     //* Temporal parameters
     double dif_cfl = (dx*dx * dy*dy)/(2*dx*dx + 2*dy*dy);   // Diffusion CFL
@@ -116,11 +120,12 @@ int main(int argc, char** argv)
     if (problem == "Diff_Adv_2D")
     {
         //? Initial condition
+        #pragma omp parallel for
         for (int ii = 0; ii < n; ii++)
         {
             for (int jj = 0; jj< n; jj++)
             {
-                u(n*ii + jj) = 1 + exp(-((X[ii] + 0.5)*(X[ii] + 0.5) + (Y[jj] + 0.5)*(Y[jj] + 0.5))/0.01);
+                u(n*ii + jj) = 1 + exp(-((X[ii] + 0.5)*(X[ii] + 0.5) + (Y[jj] + 0.5)*(Y[jj] + 0.5))/0.02);
             }
         }
     }
@@ -146,65 +151,112 @@ int main(int argc, char** argv)
 
     cout << "Running the 2D diffusion--advection problem with the " << integrator << " integrator." << endl << endl;
 
+    // for (int nn = 0; nn < num_time_steps; nn++)
+    // {
+    //     //? ------------- List of integrators ------------- ?//
+
+    //     if (integrator == "Implicit_Euler")
+    //     {
+    //         implicit_Euler(A_diff_adv, u, tol, dt, iters, LHS_matrix, rhs_vector);
+    //     }
+    //     else if (integrator == "CN")
+    //     {
+    //         CN(A_diff_adv, u, tol, dt, iters, LHS_matrix, rhs_vector);
+    //     }
+    //     else
+    //     {
+    //         cout << "Incorrect integrator! Please recheck. Terminating simulations ... " << endl << endl;
+    //         return 1;
+    //     }
+
+    //     //? ----------------------------------------------- ?//
+
+    //     //* Update variables
+    //     time = time + dt;
+    //     time_steps = time_steps + 1;
+    //     iters_total = iters_total + iters;
+        
+    //     //! The solution (u) does not have to updated explicitly.
+    //     //! The integrators automatically updates the solution.
+
+    //     if (time_steps % 10 == 0)
+    //     {
+    //         cout << "Time step      : " << time_steps << endl;
+    //         cout << "Simulation time: " << time << endl << endl;
+    //     }
+
+    //     //! Write data to files (for movies)
+    //     if (time_steps % 100 == 0 && movie == "yes")
+    //     {
+    //         string output_data = "./movie/" +  to_string(time_steps) + ".txt";
+    //         ofstream data;
+    //         data.open(output_data); 
+    //         for(int ii = 0; ii < N; ii++)
+    //         {
+    //             data << setprecision(16) << u[ii] << endl;
+    //         }
+    //         data.close();
+    //     }
+    // }
+
+    LeXInt::timer init_coarse, fine_parallel;
+
+    //! Parareal (num_threads = num_time_steps)
+    //TODO: include another dimension for parareal iteration
+    Eigen::MatrixXd u_par(num_time_steps, N);          //? Create a matrix to store all value of u at all coarse time steps 
+    u_par.row(0) = u;                                  //? Initial value stored at the 1st row
+
+    //? Initial Coarse solver (serial)
+    init_coarse.start();
     for (int nn = 0; nn < num_time_steps; nn++)
     {
-        //? ------------- List of integrators ------------- ?//
+        CN(A_diff_adv, u, tol, dt, iters, LHS_matrix, rhs_vector);
+        u_par.row(nn) = u;                              //? Subsequent solutions stored at the nth row
+    }
+    init_coarse.stop();
 
-        if (integrator == "Implicit_Euler")
-        {
-            implicit_Euler(A_diff_adv, u, tol, dt, iters, LHS_matrix, rhs_vector);
-        }
-        else if (integrator == "CN")
-        {
-            CN(A_diff_adv, u, tol, dt, iters, LHS_matrix, rhs_vector);
-        }
-        else
-        {
-            cout << "Incorrect integrator! Please recheck. Terminating simulations ... " << endl << endl;
-            return 1;
-        }
+    int num_fine_steps = 10;
+    double dt_fine = dt/num_fine_steps;
 
-        //? ----------------------------------------------- ?//
+    //? Fine solver (parallel)
+    fine_parallel.start();
 
-        //* Update variables
-        time = time + dt;
-        time_steps = time_steps + 1;
-        iters_total = iters_total + iters;
+    #pragma omp parallel for num_threads(num_threads)
+    for (int nn = 0; nn < num_time_steps; nn++)
+    {
+        Eigen::VectorXd u_local = u_par.row(nn);        //* Thread-local u
+        Eigen::SparseMatrix<double> LHS_matrix_local;   //* Thread-local LHS_matrix
+        Eigen::VectorXd rhs_vector_local;               //* Thread-local rhs_vector
         
-        //! The solution (u) does not have to updated explcitly.
-        //! The integrators automatically updates the solution.
-
-        if (time_steps % 5 == 0)
+        for (int mm = 0; mm < num_fine_steps; mm++)
         {
-            cout << "Time step      : " << time_steps << endl;
-            cout << "Simulation time: " << time << endl << endl;
+            CN(A_diff_adv, u_local, tol, dt_fine, iters, LHS_matrix_local, rhs_vector_local);   
         }
 
-        //! Write data to files (for movies)
-        if (time_steps % 5 == 0 && movie == "yes")
+        #pragma omp critical                            //* Ensure only one thread writes to u_par at a time
         {
-            string output_data = "./movie/" +  to_string(time_steps) + ".txt";
-            ofstream data;
-            data.open(output_data); 
-            for(int ii = 0; ii < N; ii++)
-            {
-                data << setprecision(16) << u[ii] << endl;
-            }
-            data.close();
+            u_par.row(nn) = u_local;                    //* Store the result back in u_par
         }
     }
+
+    fine_parallel.stop();
+
+
+    cout << "Time elapsed for coarse solver (s)     : " << init_coarse.total() << endl;
+    cout << "Time elapsed for fine solver (s)       : " << fine_parallel.total() << endl;
 
     time_loop.stop();
 
     cout << endl << "==================================================" << endl;
-    cout << "Simulation time            : " << time << endl;
-    cout << "Total number of time steps : " << time_steps << endl;
-    cout << "Total number of iterations : " << iters_total << endl;
-    cout << "Total time elapsed (s)     : " << time_loop.total() << endl;
+    cout << "Simulation time                : " << time << endl;
+    cout << "Total number of time steps     : " << time_steps << endl;
+    cout << "Number of OpenMP threads used  : " << num_threads << endl;
+    cout << "Total number of iterations     : " << iters_total << endl;
+    cout << "Total time elapsed (s)         : " << time_loop.total() << endl;
     cout << "==================================================" << endl << endl;
 
 
-    //? Create directory to write simulation results/parameters
+    // //? Create directory to write simulation results/parameters
     int sys_value = system(("mkdir -p ./" + integrator + "/cores_" + to_string(num_threads)).c_str());
     string directory = "./" + integrator + "/cores_" + to_string(num_threads);
     string results = directory + "/Parameters.txt";
