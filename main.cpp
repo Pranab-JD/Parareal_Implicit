@@ -203,15 +203,15 @@ int main(int argc, char** argv)
 
     //! Parareal (num_threads = num_time_steps)
     //TODO: include another dimension for parareal iteration
-    Eigen::MatrixXd u_par(num_time_steps, N);          //? Create a matrix to store all value of u at all coarse time steps 
-    u_par.row(0) = u;                                  //? Initial value stored at the 1st row
+    Eigen::MatrixXd u_par(num_time_steps, N);          //* Create a matrix to store all value of u at all coarse time steps 
+    u_par.row(0) = u;                                  //* Initial value stored at the 1st row
 
     //? Initial Coarse solver (serial)
     init_coarse.start();
     for (int nn = 0; nn < num_time_steps; nn++)
     {
         CN(A_diff_adv, u, tol, dt, iters, LHS_matrix, rhs_vector);
-        u_par.row(nn) = u;                              //? Subsequent solutions stored at the nth row
+        u_par.row(nn) = u;                              //* Subsequent solutions stored at the nth row
     }
     init_coarse.stop();
 
@@ -224,8 +224,8 @@ int main(int argc, char** argv)
     #pragma omp parallel for num_threads(num_threads)
     for (int nn = 0; nn < num_time_steps; nn++)
     {
-        Eigen::VectorXd u_local = u_par.row(nn);        //* Thread-local u
         Eigen::SparseMatrix<double> LHS_matrix_local;   //* Thread-local LHS_matrix
+        Eigen::VectorXd u_local = u_par.row(nn);        //* Thread-local u
         Eigen::VectorXd rhs_vector_local;               //* Thread-local rhs_vector
         
         for (int mm = 0; mm < num_fine_steps; mm++)
