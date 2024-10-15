@@ -274,7 +274,7 @@ int main(int argc, char** argv)
     params.close();
 
     //? Create directory to write final simulation data
-    string final_data = directory + "/Final_data.txt";
+    string final_data = directory + "/dt_cfl_" + to_string(n_cfl) + "_data.txt";
     ofstream data;
     data.open(final_data); 
     for(int ii = 0; ii < N; ii++)
