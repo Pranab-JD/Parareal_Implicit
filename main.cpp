@@ -70,7 +70,7 @@ int main(int argc, char** argv)
     //* Initialise additional parameters
     double dx = X[2] - X[1];                              // Grid spacing
     double dy = Y[2] - Y[1];                              // Grid spacing
-    double velocity = 40;                                   // Advection speed
+    double velocity = 10;                                   // Advection speed
 
     //* Temporal parameters
     double dif_cfl = (dx*dx * dy*dy)/(2*dx*dx + 2*dy*dy);   // Diffusion CFL
@@ -220,6 +220,16 @@ int main(int argc, char** argv)
     params << "Total iterations (for implicit methods): " << iters_total << endl;
     params << setprecision(16) << "Runtime (s): " << time_loop.total() << endl;
     params.close();
+
+    //? Create directory to write final simulation data
+    string final_data = directory + "/dt_cfl_" + to_string(n_cfl) + "_data.txt";
+    ofstream data;
+    data.open(final_data); 
+    for(int ii = 0; ii < N; ii++)
+    {
+        data << setprecision(16) << u[ii] << endl;
+    }
+    data.close();
 
     cout << "Simulations complete!" << endl;
 
