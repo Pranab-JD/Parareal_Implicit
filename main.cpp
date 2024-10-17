@@ -70,7 +70,7 @@ int main(int argc, char** argv)
     //* Initialise additional parameters
     double dx = X[2] - X[1];                              // Grid spacing
     double dy = Y[2] - Y[1];                              // Grid spacing
-    double velocity = 10;                                   // Advection speed
+    double velocity = 40;                                   // Advection speed
 
     //* Temporal parameters
     double dif_cfl = (dx*dx * dy*dy)/(2*dx*dx + 2*dy*dy);   // Diffusion CFL
@@ -156,7 +156,7 @@ int main(int argc, char** argv)
         }
         else if (integrator == "CN")
         {
-            //TODO: Implement CN
+            CN(A_diff_adv, u, tol, dt, iters, LHS_matrix, rhs_vector);
         }
         else
         {
