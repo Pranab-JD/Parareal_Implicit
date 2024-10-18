@@ -70,7 +70,7 @@ int main(int argc, char** argv)
     //* Initialise additional parameters
     double dx = X[2] - X[1];                              // Grid spacing
     double dy = Y[2] - Y[1];                              // Grid spacing
-    double velocity = 10;                                   // Advection speed
+    double velocity = 40;                                   // Advection speed
 
     //* Temporal parameters
     double dif_cfl = (dx*dx * dy*dy)/(2*dx*dx + 2*dy*dy);   // Diffusion CFL
@@ -174,14 +174,14 @@ int main(int argc, char** argv)
         //! The solution (u) does not have to updated explcitly.
         //! The integrators automatically updates the solution.
 
-        if (time_steps % 5 == 0)
+        if (time_steps % 25 == 0)
         {
             cout << "Time step      : " << time_steps << endl;
             cout << "Simulation time: " << time << endl << endl;
         }
 
         //! Write data to files (for movies)
-        if (time_steps % 5 == 0 && movie == "yes")
+        if (time_steps % 25 == 0 && movie == "yes")
         {
             string output_data = "./movie/" +  to_string(time_steps) + ".txt";
             ofstream data;
