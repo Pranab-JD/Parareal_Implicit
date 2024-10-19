@@ -120,7 +120,7 @@ int main(int argc, char** argv)
         {
             for (int jj = 0; jj< n; jj++)
             {
-                u(n*ii + jj) = 1 + exp(-((X[ii] + 0.5)*(X[ii] + 0.5) + (Y[jj] + 0.5)*(Y[jj] + 0.5))/0.01);
+                u(n*ii + jj) = 1 + 10*exp(-((X[ii] + 0.5)*(X[ii] + 0.5) + (Y[jj] + 0.5)*(Y[jj] + 0.5))/0.02);
             }
         }
     }
