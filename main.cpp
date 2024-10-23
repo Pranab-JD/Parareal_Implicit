@@ -111,7 +111,7 @@ int main(int argc, char** argv)
     //? Choose problem
     string problem = "Diff_Adv_2D";
     Eigen::SparseMatrix<double> A_diff_adv(N, N);       //* Add diffusion and advection matrices 
-    A_diff_adv = A_diff_adv + A_adv;
+    A_diff_adv = A_dif + A_adv;
    
     //! Print the matrix (avoid doing this for large matrices)
     // cout << "Diffusion matrix:" << endl << Eigen::MatrixXd(A_dif) << endl << endl;
@@ -203,44 +203,50 @@ int main(int argc, char** argv)
 
     //! Parareal (num_threads = num_time_steps)
     //TODO: include another dimension for parareal iteration
-    Eigen::MatrixXd u_par(num_time_steps, N);          //* Create a matrix to store all value of u at all coarse time steps 
-    u_par.row(0) = u;                                  //* Initial value stored at the 1st row
+    Eigen::MatrixXd u_coarse(num_time_steps, N);          //* Create a matrix to store all value of u at all coarse time steps 
+    u_coarse.row(0) = u;                                  //* Initial value stored at the 1st row
 
     //? Initial Coarse solver (serial)
     init_coarse.start();
     for (int nn = 0; nn < num_time_steps; nn++)
     {
         CN(A_diff_adv, u, tol, dt, iters, LHS_matrix, rhs_vector);
-        u_par.row(nn) = u;                              //* Subsequent solutions stored at the nth row
+        u_coarse.row(nn) = u;                              //* Subsequent solutions stored at the nth row
     }
     init_coarse.stop();
 
-    int num_fine_steps = 10;
+    int num_fine_steps = 4;
     double dt_fine = dt/num_fine_steps;
 
-    //? Fine solver (parallel)
+    //? Parareal iterations
     fine_parallel.start();
-
-    #pragma omp parallel for num_threads(num_threads)
-    for (int nn = 0; nn < num_time_steps; nn++)
+    for (int k = 0; k < max_iter; ++k) 
     {
-        Eigen::SparseMatrix<double> LHS_matrix_local;   //* Thread-local LHS_matrix
-        Eigen::VectorXd u_local = u_par.row(nn);        //* Thread-local u
-        Eigen::VectorXd rhs_vector_local;               //* Thread-local rhs_vector
-        
-        for (int mm = 0; mm < num_fine_steps; mm++)
+        Eigen::MatrixXd u_new = u_coarse;  // Copy current fine solution
+
+        //? Fine solver (parallel)
+        #pragma omp parallel for num_threads(num_threads)
+        for (int nn = 0; nn < num_time_steps; nn++)
         {
-            CN(A_diff_adv, u_local, tol, dt_fine, iters, LHS_matrix_local, rhs_vector_local);   
+            Eigen::SparseMatrix<double> LHS_matrix_local;   //* Thread-local LHS_matrix
+            Eigen::VectorXd u_local = u_coarse.row(nn);        //* Thread-local u
+            Eigen::VectorXd rhs_vector_local;               //* Thread-local rhs_vector
+            
+            for (int mm = 0; mm < num_fine_steps; mm++)
+            {
+                CN(A_diff_adv, u_local, tol, dt_fine, iters, LHS_matrix_local, rhs_vector_local);   
+            }
+
+            #pragma omp critical                            //* Ensure only one thread writes to u_coarse at a time
+            {
+                u_coarse.row(nn) = u_local;                    //* Store the result back in u_coarse
+            }
         }
 
-        #pragma omp critical                            //* Ensure only one thread writes to u_par at a time
-        {
-            u_par.row(nn) = u_local;                    //* Store the result back in u_par
-        }
+
     }
 
     fine_parallel.stop();
-
 
     cout << "Time elapsed for coarse solver (s)     : " << init_coarse.total() << endl;
     cout << "Time elapsed for fine solver (s)       : " << fine_parallel.total() << endl;
@@ -256,7 +262,7 @@ int main(int argc, char** argv)
     cout << "==================================================" << endl << endl;
 
 
-    // //? Create directory to write simulation results/parameters
+    //? Create directory to write simulation results/parameters
     int sys_value = system(("mkdir -p ./" + integrator + "/cores_" + to_string(num_threads)).c_str());
     string directory = "./" + integrator + "/cores_" + to_string(num_threads);
     string results = directory + "/Parameters.txt";
