@@ -107,7 +107,7 @@ int main(int argc, char** argv)
     //? Choose problem
     string problem = "Diff_Adv_2D";
     Eigen::SparseMatrix<double> A_diff_adv(N, N);       //* Add diffusion and advection matrices 
-    A_diff_adv = A_diff_adv + A_adv;
+    A_diff_adv = A_diff + A_adv;
    
     //! Print the matrix (avoid doing this for large matrices)
     // cout << "Diffusion matrix:" << endl << Eigen::MatrixXd(A_dif) << endl << endl;
