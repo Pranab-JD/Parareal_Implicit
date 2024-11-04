@@ -27,7 +27,6 @@ using namespace std;
 
 int main(int argc, char** argv)
 {
-    //? Input parameters
 
     int index = atoi(argv[1]);              // N = 2^index * 2^index
     double n_cfl = atof(argv[2]);           // dt = n_cfl * dt_cfl
@@ -49,8 +48,6 @@ int main(int argc, char** argv)
     //! Set GPU spport to false
     bool GPU_access = false;
 
-    //* ----------------------------------------------------------------- *//
-
     //* Initialise parameters
     int n = pow(2, index);                          // # grid points (1D)
     int N = n*n;                                    // # grid points (2D)
@@ -61,10 +58,8 @@ int main(int argc, char** argv)
     vector<double> X(n);                            // Array of grid points
     vector<double> Y(n);                            // Array of grid points
     Eigen::VectorXd u(N);                           // Initial condition
-    Eigen::VectorXd u_sol(N);                       // Solution vector 
 
     //* Set up X, Y arrays and initial condition
-    #pragma omp parallel for
     for (int ii = 0; ii < n; ii++)
     {
         X[ii] = xmin + ii*(xmax - xmin)/n;
@@ -80,11 +75,15 @@ int main(int argc, char** argv)
     double dif_cfl = (dx*dx * dy*dy)/(2*dx*dx + 2*dy*dy);   // Diffusion CFL
     double adv_cfl = min(dx/velocity, dy/velocity);         // Advection CFL
     double dt = n_cfl*min(dif_cfl, adv_cfl);                // Step size
+    double dt_G = dt; 
+    double fine_time_steps = 100;
+    double dt_F = dt_G/fine_time_steps;
 
     double time = 0;                                        // Simulation time elapsed                          
     int time_steps = 0;                                     // # time steps
     int iters = 0;                                          // # of iterations per time step
     int iters_total = 0;                                    // Total # of iterations during the simulation
+    int max_iters = num_time_steps;
 
     cout << endl << "N = " << N << ", tol = " << tol << ", Time steps = " << num_time_steps << endl;
     cout << "N_cfl = " << n_cfl << ", CFL: " << min(dif_cfl, adv_cfl) << ", dt = " << dt << endl << endl;
@@ -120,12 +119,11 @@ int main(int argc, char** argv)
     if (problem == "Diff_Adv_2D")
     {
         //? Initial condition
-        #pragma omp parallel for
         for (int ii = 0; ii < n; ii++)
         {
             for (int jj = 0; jj< n; jj++)
             {
-                u(n*ii + jj) = 1 + exp(-((X[ii] + 0.5)*(X[ii] + 0.5) + (Y[jj] + 0.5)*(Y[jj] + 0.5))/0.02);
+                u(n*ii + jj) = 1 + 10*exp(-((X[ii] + 0.5)*(X[ii] + 0.5) + (Y[jj] + 0.5)*(Y[jj] + 0.5))/0.02);
             }
         }
     }
@@ -151,114 +149,112 @@ int main(int argc, char** argv)
 
     cout << "Running the 2D diffusion--advection problem with the " << integrator << " integrator." << endl << endl;
 
-    // for (int nn = 0; nn < num_time_steps; nn++)
-    // {
-    //     //? ------------- List of integrators ------------- ?//
-
-    //     if (integrator == "Implicit_Euler")
-    //     {
-    //         implicit_Euler(A_diff_adv, u, tol, dt, iters, LHS_matrix, rhs_vector);
-    //     }
-    //     else if (integrator == "CN")
-    //     {
-    //         CN(A_diff_adv, u, tol, dt, iters, LHS_matrix, rhs_vector);
-    //     }
-    //     else
-    //     {
-    //         cout << "Incorrect integrator! Please recheck. Terminating simulations ... " << endl << endl;
-    //         return 1;
-    //     }
-
-    //     //? ----------------------------------------------- ?//
-
-    //     //* Update variables
-    //     time = time + dt;
-    //     time_steps = time_steps + 1;
-    //     iters_total = iters_total + iters;
-        
-    //     //! The solution (u) does not have to updated explicitly.
-    //     //! The integrators automatically updates the solution.
-
-    //     if (time_steps % 10 == 0)
-    //     {
-    //         cout << "Time step      : " << time_steps << endl;
-    //         cout << "Simulation time: " << time << endl << endl;
-    //     }
-
-    //     //! Write data to files (for movies)
-    //     if (time_steps % 100 == 0 && movie == "yes")
-    //     {
-    //         string output_data = "./movie/" +  to_string(time_steps) + ".txt";
-    //         ofstream data;
-    //         data.open(output_data); 
-    //         for(int ii = 0; ii < N; ii++)
-    //         {
-    //             data << setprecision(16) << u[ii] << endl;
-    //         }
-    //         data.close();
-    //     }
-    // }
-
-    LeXInt::timer init_coarse, fine_parallel;
-
-    //! Parareal (num_threads = num_time_steps)
-    //TODO: include another dimension for parareal iteration
-    Eigen::MatrixXd u_coarse(num_time_steps, N);          //* Create a matrix to store all value of u at all coarse time steps 
-    u_coarse.row(0) = u;                                  //* Initial value stored at the 1st row
-
-    //? Initial Coarse solver (serial)
-    init_coarse.start();
-    for (int nn = 0; nn < num_time_steps; nn++)
+    /// --------- Initialize solution arrays --------- ///
+    vector<vector<Eigen::VectorXd>> u_sol(max_iters, vector<Eigen::VectorXd>(num_time_steps+1));
+    for (int k=0;k<max_iters;k++)
     {
-        CN(A_diff_adv, u, tol, dt, iters, LHS_matrix, rhs_vector);
-        u_coarse.row(nn) = u;                              //* Subsequent solutions stored at the nth row
+        u_sol[k][0] = u;
     }
-    init_coarse.stop();
-
-    int num_fine_steps = 4;
-    double dt_fine = dt/num_fine_steps;
-
-    //? Parareal iterations
-    fine_parallel.start();
-    for (int k = 0; k < max_iter; ++k) 
+    // First iteration for coarse solver
+    vector<vector<Eigen::VectorXd>> coarse_sol(max_iters, vector<Eigen::VectorXd>(num_time_steps));
+    coarse_sol[0][0] = u;
+    for (int t = 1; t < num_time_steps-1; t++)
     {
-        Eigen::MatrixXd u_new = u_coarse;  // Copy current fine solution
+        //? ------------- List of integrators ------------- ?//
 
-        //? Fine solver (parallel)
-        #pragma omp parallel for num_threads(num_threads)
-        for (int nn = 0; nn < num_time_steps; nn++)
+        if (integrator == "Implicit_Euler")
         {
-            Eigen::SparseMatrix<double> LHS_matrix_local;   //* Thread-local LHS_matrix
-            Eigen::VectorXd u_local = u_coarse.row(nn);        //* Thread-local u
-            Eigen::VectorXd rhs_vector_local;               //* Thread-local rhs_vector
-            
-            for (int mm = 0; mm < num_fine_steps; mm++)
-            {
-                CN(A_diff_adv, u_local, tol, dt_fine, iters, LHS_matrix_local, rhs_vector_local);   
-            }
+            implicit_Euler(A_diff_adv, u, tol, dt_G, iters, LHS_matrix, rhs_vector);
+        }
+        else if (integrator == "CN")
+        {
+            CN(A_diff_adv, u, tol, dt_G, iters, LHS_matrix, rhs_vector);
+        }
+        else
+        {
+            cout << "Incorrect integrator! Please recheck. Terminating simulations ... " << endl << endl;
+            return 1;
+        }
+        coarse_sol[0][t] = u;
+        u_sol[0][t] = coarse_sol[0][t-1]; 
+    }
+    /// --------- Initialize solution arrays --------- ///
 
-            #pragma omp critical                            //* Ensure only one thread writes to u_coarse at a time
+
+    /// --------- Parareal algorithm --------- ///
+    time = 0;
+    vector<vector<Eigen::VectorXd>> fine_sol(max_iters, vector<Eigen::VectorXd>(num_time_steps));
+    for (int t=0;t<num_time_steps-1;t++)
+    {
+        for (int k=0;k<max_iters-1;k++)
+        {
+            // new coarse solver
+
+            coarse_sol[k+1][t]  = u_sol[k+1][t];
+            CN(A_diff_adv, coarse_sol[k+1][t], tol, dt_G, iters, LHS_matrix, rhs_vector); 
+            
+            // fine solver 
+            fine_sol[k][t] = u_sol[k][t];
+            for (int nn=0;nn<fine_time_steps;nn++)
+                CN(A_diff_adv, fine_sol[k][t], tol, dt_F, iters, LHS_matrix, rhs_vector); 
+            
+            // coarse solver
+            coarse_sol[k][t] = u_sol[k][t];
+            CN(A_diff_adv, coarse_sol[k][t], tol, dt_G, iters, LHS_matrix, rhs_vector); 
+
+            // predictor-corrector scheme
+            u_sol[k+1][t+1] = coarse_sol[k+1][t] + fine_sol[k][t] - coarse_sol[k][t]; 
+
+            // Check for convergence
+            if ((u_sol[k][t+1]-u_sol[k+1][t+1]).norm()/(u_sol[k+1][t+1]).norm() < tol)
             {
-                u_coarse.row(nn) = u_local;                    //* Store the result back in u_coarse
+		for (int j=k+1;j<max_iters-1;j++)
+		{
+		    u_sol[j+1][t+1] = u_sol[k+1][t+1];
+		}
+                break; 
             }
         }
 
+        //* Update variables
+        time = time + dt_G;
+        time_steps = time_steps + 1;
+        iters_total = iters_total + iters;
+        
+        //! The solution (u) does not have to updated explcitly.
+        //! The integrators automatically updates the solution.
 
+        if (time_steps % 1 == 0)
+        {
+            cout << "Time step      : " << time_steps << endl;
+            cout << "Simulation time: " << time << endl << endl;
+        }
+
+        //! Write data to files (for movies)
+        u = u_sol[max_iters-1][t];
+        if (time_steps % 1 == 0 && movie == "yes")
+        {
+            string output_data = "./movie/" +  to_string(time_steps) + ".txt";
+            ofstream data;
+            data.open(output_data); 
+            for(int ii = 0; ii < N; ii++)
+            {
+                data << setprecision(16) << u[ii] << endl;
+            }
+            data.close();
+        }
     }
+    /// --------- Parareal algorithm --------- ///
 
-    fine_parallel.stop();
 
-    cout << "Time elapsed for coarse solver (s)     : " << init_coarse.total() << endl;
-    cout << "Time elapsed for fine solver (s)       : " << fine_parallel.total() << endl;
 
     time_loop.stop();
 
     cout << endl << "==================================================" << endl;
-    cout << "Simulation time                : " << time << endl;
-    cout << "Total number of time steps     : " << time_steps << endl;
-    cout << "Number of OpenMP threads used  : " << num_threads << endl;
-    cout << "Total number of iterations     : " << iters_total << endl;
-    cout << "Total time elapsed (s)         : " << time_loop.total() << endl;
+    cout << "Simulation time            : " << time << endl;
+    cout << "Total number of time steps : " << time_steps << endl;
+    cout << "Total number of iterations : " << iters_total << endl;
+    cout << "Total time elapsed (s)     : " << time_loop.total() << endl;
     cout << "==================================================" << endl << endl;
 
 
