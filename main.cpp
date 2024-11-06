@@ -61,7 +61,7 @@ int main(int argc, char** argv)
     vector<double> X(n);                            // Array of grid points
     vector<double> Y(n);                            // Array of grid points
     Eigen::VectorXd u(N);                           // Initial condition
-    Eigen::VectorXd u_sol(N);                       // Solution vector 
+    
 
     //* Set up X, Y arrays and initial condition
     #pragma omp parallel for
@@ -125,14 +125,14 @@ int main(int argc, char** argv)
         {
             for (int jj = 0; jj< n; jj++)
             {
-                u(n*ii + jj) = 1 + exp(-((X[ii] + 0.5)*(X[ii] + 0.5) + (Y[jj] + 0.5)*(Y[jj] + 0.5))/0.02);
+                u(n*ii + jj) = 1 + 10*exp(-((X[ii] + 0.5)*(X[ii] + 0.5) + (Y[jj] + 0.5)*(Y[jj] + 0.5))/0.02);
             }
         }
     }
     else
     {
         cout << "Undefined problem! Please check that you have entered the correct problem." << endl;
-    } 
+    }
 
     //! Create directories (for movies)
     if (movie == "yes")
@@ -145,111 +145,188 @@ int main(int argc, char** argv)
     Eigen::VectorXd rhs_vector(N);
     Eigen::SparseMatrix<double> LHS_matrix(n, n);
 
+    LeXInt::timer time_loop, serial_time;
+    LeXInt::timer init_coarse, fine_solver, parareal_iters;
+
+    Eigen::VectorXd u_cn(u);                           // Initial condition
+
     //! Time Loop
-    LeXInt::timer time_loop;
     time_loop.start();
 
     cout << "Running the 2D diffusion--advection problem with the " << integrator << " integrator." << endl << endl;
 
-    // for (int nn = 0; nn < num_time_steps; nn++)
-    // {
-    //     //? ------------- List of integrators ------------- ?//
+    serial_time.start();
 
-    //     if (integrator == "Implicit_Euler")
-    //     {
-    //         implicit_Euler(A_diff_adv, u, tol, dt, iters, LHS_matrix, rhs_vector);
-    //     }
-    //     else if (integrator == "CN")
-    //     {
-    //         CN(A_diff_adv, u, tol, dt, iters, LHS_matrix, rhs_vector);
-    //     }
-    //     else
-    //     {
-    //         cout << "Incorrect integrator! Please recheck. Terminating simulations ... " << endl << endl;
-    //         return 1;
-    //     }
-
-    //     //? ----------------------------------------------- ?//
-
-    //     //* Update variables
-    //     time = time + dt;
-    //     time_steps = time_steps + 1;
-    //     iters_total = iters_total + iters;
-        
-    //     //! The solution (u) does not have to updated explicitly.
-    //     //! The integrators automatically updates the solution.
-
-    //     if (time_steps % 10 == 0)
-    //     {
-    //         cout << "Time step      : " << time_steps << endl;
-    //         cout << "Simulation time: " << time << endl << endl;
-    //     }
-
-    //     //! Write data to files (for movies)
-    //     if (time_steps % 100 == 0 && movie == "yes")
-    //     {
-    //         string output_data = "./movie/" +  to_string(time_steps) + ".txt";
-    //         ofstream data;
-    //         data.open(output_data); 
-    //         for(int ii = 0; ii < N; ii++)
-    //         {
-    //             data << setprecision(16) << u[ii] << endl;
-    //         }
-    //         data.close();
-    //     }
-    // }
-
-    LeXInt::timer init_coarse, fine_parallel;
-
-    //! Parareal (num_threads = num_time_steps)
-    //TODO: include another dimension for parareal iteration
-    Eigen::MatrixXd u_coarse(num_time_steps, N);          //* Create a matrix to store all value of u at all coarse time steps 
-    u_coarse.row(0) = u;                                  //* Initial value stored at the 1st row
-
-    //? Initial Coarse solver (serial)
-    init_coarse.start();
     for (int nn = 0; nn < num_time_steps; nn++)
     {
+        //? ------------- List of integrators ------------- ?//
+
+        if (integrator == "Implicit_Euler")
+        {
+            implicit_Euler(A_diff_adv, u, tol, dt, iters, LHS_matrix, rhs_vector);
+        }
+        else if (integrator == "CN")
+        {
+            CN(A_diff_adv, u_cn, tol, dt, iters, LHS_matrix, rhs_vector);
+        }
+        else
+        {
+            cout << "Incorrect integrator! Please recheck. Terminating simulations ... " << endl << endl;
+            return 1;
+        }
+
+        //? ----------------------------------------------- ?//
+
+        //* Update variables
+        time = time + dt;
+        time_steps = time_steps + 1;
+        iters_total = iters_total + iters;
+        
+        //! The solution (u) does not have to updated explicitly.
+        //! The integrators automatically updates the solution.
+
+        if (time_steps % 10 == 0)
+        {
+            cout << "Time step      : " << time_steps << endl;
+            cout << "Simulation time: " << time << endl << endl;
+        }
+
+        //! Write data to files (for movies)
+        if (time_steps % 100 == 0 && movie == "yes")
+        {
+            string output_data = "./movie/" +  to_string(time_steps) + ".txt";
+            ofstream data;
+            data.open(output_data); 
+            for(int ii = 0; ii < N; ii++)
+            {
+                data << setprecision(16) << u[ii] << endl;
+            }
+            data.close();
+        }
+    }
+
+    serial_time.stop();
+
+    //! Parareal (num_threads = num_time_steps)
+
+    int max_parareal_iters = num_time_steps;
+    Eigen::VectorXd u_init(u);                           // Initial condition
+
+    Eigen::MatrixXd u_fine(num_time_steps, N);
+    vector<Eigen::MatrixXd> u_coarse(max_parareal_iters, Eigen::MatrixXd(num_time_steps+1, N));          //* Create a matrix to store all value of u at all coarse time steps 
+    vector<Eigen::MatrixXd> u_parareal(max_parareal_iters, Eigen::MatrixXd(num_time_steps+1, N));        //* Create a matrix to store all value of u at all coarse time steps 
+    
+    //? Initial Coarse solver (serial)
+    init_coarse.start();
+    u_coarse[0].row(0) = u;                         // Initial condition for the first iteration
+    for (int nn = 0; nn < num_time_steps; ++nn)
+    {
         CN(A_diff_adv, u, tol, dt, iters, LHS_matrix, rhs_vector);
-        u_coarse.row(nn) = u;                              //* Subsequent solutions stored at the nth row
+        u_coarse[0].row(nn+1) = u;                              //* Subsequent solutions stored at the nth row
     }
     init_coarse.stop();
 
+    //* Initialize parareal with the first coarse solution
+    u_parareal[0] = u_coarse[0];
+    
     int num_fine_steps = 4;
     double dt_fine = dt/num_fine_steps;
 
     //? Parareal iterations
-    fine_parallel.start();
-    for (int k = 0; k < max_iter; ++k) 
+    parareal_iters.start();
+    for (int kk = 1; kk < max_parareal_iters; ++kk)
     {
-        Eigen::MatrixXd u_new = u_coarse;  // Copy current fine solution
+        //? n = 0, kk = : u, at the first time step, for all parareal iteration will be the same
+        u_coarse[kk].row(0) = u_init;
+        u_parareal[kk].row(0) = u_init;
+
+        //* Start fine solution from current coarse solution
+        u_fine = u_coarse[kk];  
+
+        //* ----------------------------------------------- *//
 
         //? Fine solver (parallel)
-        #pragma omp parallel for num_threads(num_threads)
-        for (int nn = 0; nn < num_time_steps; nn++)
+        fine_solver.start();
+
+        // #pragma omp parallel for
+        for (int nn = 0; nn < num_time_steps; ++nn)
         {
-            Eigen::SparseMatrix<double> LHS_matrix_local;   //* Thread-local LHS_matrix
-            Eigen::VectorXd u_local = u_coarse.row(nn);        //* Thread-local u
-            Eigen::VectorXd rhs_vector_local;               //* Thread-local rhs_vector
-            
-            for (int mm = 0; mm < num_fine_steps; mm++)
+            // Define thread-local variables
+            Eigen::VectorXd u_fine_local = u_fine.row(nn);                   // Thread-local u
+            Eigen::SparseMatrix<double> LHS_matrix_local(N, N); // Thread-local LHS_matrix
+            Eigen::VectorXd rhs_vector_local(N);                // Thread-local rhs_vector
+            // int iters_local;
+            // double dt_fine_local = dt_fine;
+            // double tol_local = tol;
+            // Eigen::SparseMatrix<double> A_local = A_diff_adv;
+
+            // u_fine_local = u_fine.row(nn);
+
+            // LHS_matrix_local.setIdentity();  // Adjust this initialization as needed
+            // rhs_vector_local.setZero();      // Adjust this initialization as needed
+
+            // Perform fine time-stepping with the fine solver
+            for (int mm = 0; mm < num_fine_steps; ++mm)
             {
-                CN(A_diff_adv, u_local, tol, dt_fine, iters, LHS_matrix_local, rhs_vector_local);   
+                CN(A_diff_adv, u_fine_local, tol, dt_fine, iters, LHS_matrix_local, rhs_vector_local);
             }
 
-            #pragma omp critical                            //* Ensure only one thread writes to u_coarse at a time
-            {
-                u_coarse.row(nn) = u_local;                    //* Store the result back in u_coarse
-            }
+            // Store the result back to a temporary thread-local array
+            // It should not write directly to u_fine here to avoid race conditions
+            // Instead use a thread-local matrix to gather results
+            // #pragma omp critical
+            u_fine.row(nn + 1) = u_fine_local; // This should only execute once per nn
         }
 
+        fine_solver.stop();
+
+        cout << "Fine " << endl << Eigen::MatrixXd(u_fine) << endl << endl;
+
+        //* ----------------------------------------------- *//
+
+        for (int nn = 0; nn < num_time_steps; ++nn)
+        {
+            //? New coarse solution
+            Eigen::VectorXd u_coarse_new = u_fine.row(nn);
+            CN(A_diff_adv, u_coarse_new, tol, dt, iters, LHS_matrix, rhs_vector);
+            u_coarse[kk].row(nn + 1) = u_coarse_new;
+        }
+        
+        //! Update u at every parareal iteration
+        for (int nn = 1; nn <= num_time_steps; nn++)
+        {
+            u_parareal[kk].row(nn) = u_coarse[kk].row(nn) + u_fine.row(nn) - u_coarse[kk-1].row(nn);
+        }
 
     }
+    parareal_iters.stop();
 
-    fine_parallel.stop();
+    Eigen::VectorXd u_diff(N), u_par(N);
+    u_par = u_parareal[max_parareal_iters-1].row(num_time_steps);
+    u_diff = u_cn - u_par;
+    cout << "Error (serial - parareal): " << u_diff.norm()/u_cn.norm() << endl << endl;
 
-    cout << "Time elapsed for coarse solver (s)     : " << init_coarse.total() << endl;
-    cout << "Time elapsed for fine solver (s)       : " << fine_parallel.total() << endl;
+
+    // for (int kk = 0; kk < max_parareal_iters; ++kk)
+    // {
+    //     cout << "Parareal #: " << kk << endl;
+    //     cout << Eigen::MatrixXd(u_parareal[kk]) << endl << endl;
+    // }
+    // cout << "Parareal solution " << endl << Eigen::MatrixXd(u_parareal[max_parareal_iters-1].row(num_time_steps)) << endl << endl;
+
+    // cout << "CN solution " << endl;
+    // for (int ii = 0; ii < N; ii++)
+    // {
+    //     cout << u_cn(ii) << "      ";
+    // }
+    // cout << endl << endl;
+
+
+    cout << "Time elapsed for serial (s)   : " << serial_time.total() << endl;
+    cout << "Time elapsed for parareal" << endl;
+    cout << "       Coarse solver (s)      : " << init_coarse.total() << endl;
+    cout << "         Fine solver (s)      : " << fine_solver.total() << endl;
+    cout << " Parareal iterations (s)      : " << parareal_iters.total() << endl;
 
     time_loop.stop();
 
