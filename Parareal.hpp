@@ -50,12 +50,16 @@ void fine(const Eigen::SparseMatrix<double>& A,              //* Matrix A (input
 {
     double dt_fine = T/(num_coarse_steps * num_fine_steps_per_coarse);
     
-    // #pragma omp parallel for
+    // #pragma omp parallel for num_threads(num_coarse_steps)
     for (int n = 0; n < num_coarse_steps; ++n) 
     {
+        // Eigen::SparseMatrix<double> LHS_matrix_local = LHS_matrix;
+        // Eigen::VectorXd rhs_vector_local = rhs_vector;
+        // Eigen::VectorXd u_local = u;
+        
         for (int m = 0; m < num_fine_steps_per_coarse; ++m) 
         {
-            CN(A, u, tol, dt_fine, iters, LHS_matrix, rhs_vector);
+            CN(A, u_local, tol, dt_fine, iters, LHS_matrix_local, rhs_vector_local);
         }
     }
 }

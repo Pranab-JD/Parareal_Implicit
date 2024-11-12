@@ -187,7 +187,7 @@ int main(int argc, char** argv)
         //! The solution (u) does not have to updated explicitly.
         //! The integrators automatically updates the solution.
 
-        if (time_steps % 10 == 0)
+        if (time_steps % 100 == 0)
         {
             cout << "Time step      : " << time_steps << endl;
             cout << "Simulation time: " << time << endl << endl;
@@ -210,14 +210,13 @@ int main(int argc, char** argv)
     serial_time.stop();
 
     //! Parareal (num_threads = num_time_steps = max_parareal_iters)
-    Eigen::VectorXd u_parareal = u;
-    int num_coarse_steps = num_time_steps/10;
+    int num_coarse_steps = num_time_steps/25;
     int num_fine_steps_per_coarse = 4;
     int solver_iters;
     double T = num_time_steps * dt;
+    Eigen::VectorXd u_parareal = u;
     
     parareal(A_diff_adv, u_parareal, tol, solver_iters, LHS_matrix, rhs_vector, T, num_coarse_steps, num_fine_steps_per_coarse);
-
 
     cout << "Time elapsed for serial (s)   : " << serial_time.total() << endl << endl;
     
