@@ -61,7 +61,7 @@ int main(int argc, char** argv)
     double ymax =  1;                               // Right boundary (limit)
     vector<double> X(n);                            // Array of grid points
     vector<double> Y(n);                            // Array of grid points
-    Eigen::VectorXd u(N);                           // Initial condition
+    Eigen::VectorXd u_init(N);                      // Initial condition
 
     //* Set up X, Y arrays and initial condition
     #pragma omp parallel for
@@ -111,7 +111,7 @@ int main(int argc, char** argv)
     //? Choose problem
     string problem = "Diff_Adv_2D";
     Eigen::SparseMatrix<double> A_diff_adv(N, N);       //* Add diffusion and advection matrices 
-    A_diff_adv = A_dif + A_adv;
+    A_diff_adv = A_dif;
    
     //! Print the matrix (avoid doing this for large matrices)
     // cout << "Diffusion matrix:" << endl << Eigen::MatrixXd(A_dif) << endl << endl;
@@ -125,7 +125,7 @@ int main(int argc, char** argv)
         {
             for (int jj = 0; jj< n; jj++)
             {
-                u(n*ii + jj) = 1 + 10*exp(-((X[ii] + 0.5)*(X[ii] + 0.5) + (Y[jj] + 0.5)*(Y[jj] + 0.5))/0.02);
+                u_init(n*ii + jj) = 1 + 10*exp(-((X[ii] + 0.5)*(X[ii] + 0.5) + (Y[jj] + 0.5)*(Y[jj] + 0.5))/0.02);
             }
         }
     }
@@ -154,6 +154,8 @@ int main(int argc, char** argv)
     cout << "Running the 2D diffusion--advection problem with the " << integrator << " integrator." << endl << endl;
 
     serial_time.start();
+
+    Eigen::VectorXd u(u_init);
 
     for (int nn = 0; nn < num_time_steps; nn++)
     {
@@ -209,21 +211,19 @@ int main(int argc, char** argv)
 
     serial_time.stop();
 
+    cout << "Time elapsed for serial (s)   : " << serial_time.total() << endl << endl;
+
     //! Parareal (num_threads = num_time_steps = max_parareal_iters)
-    int num_coarse_steps = num_time_steps/25;
-    int num_fine_steps_per_coarse = 4;
+    int num_coarse_steps = num_time_steps;
+    int num_fine_steps_per_coarse = 10;
     int solver_iters;
     double T = num_time_steps * dt;
-    Eigen::VectorXd u_parareal = u;
+    Eigen::VectorXd u_parareal = u_init;
     
     parareal(A_diff_adv, u_parareal, tol, solver_iters, LHS_matrix, rhs_vector, T, num_coarse_steps, num_fine_steps_per_coarse);
 
-    cout << "Time elapsed for serial (s)   : " << serial_time.total() << endl << endl;
-    
     Eigen::VectorXd u_diff = u - u_parareal;
-    cout << "**********************************" << endl;
-    cout << "Error (serial - parareal): " << u_diff.norm()/u_parareal.norm() << endl;
-    cout << "**********************************" << endl;
+    cout << endl << "Error wrt to serial: " << u_diff.mean() << endl;
 
     time_loop.stop();
 
