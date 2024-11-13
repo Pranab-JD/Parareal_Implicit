@@ -20,7 +20,7 @@ bash ../compile.sh
 ```
 5. Run the code
 ``` shell
-./Parareal_Implicit 8 2.3 1e-10 16 "CN" "yes"
+./Parareal_Implicit 8 2.3 1e-10 1000 "CN" "no" "yes" 30
 ```
 
 ### Info on input arguments:
@@ -31,3 +31,5 @@ Argument 4: Tolerance, for iterative methods (e.g., 1e-10) <br />
 Argument 5: Number of time steps <br />
 Argument 6: Desired integrator (e.g., "CN")  <br />
 Argument 7: Write data to files every N time steps for movies (if "yes", will create files & write data) <br />
+Argument 8: If "yes", parareal will be used, along with serial <br />
+Argument 9: Number of fine steps per coarse step (e.g., 10) <br />
