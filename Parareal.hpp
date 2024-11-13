@@ -66,7 +66,7 @@ void parareal(const Eigen::SparseMatrix<double>& A,        //* Matrix A (input)
               int num_fine_steps_per_coarse                //* Number of fine steps per coarse step  
               ) 
 {
-    int iters_c, iters_f;                           //* GMRes iterations counter for coars and fine solvers
+    int iters_c, iters_f, iters_t;                  //* GMRes iterations counter for coars and fine solvers
     int N = u.size();                               //* Number of elements in vector 'u'
     int max_parareal_iters = num_coarse_steps;      //* Maximum number of parareal iterations
 
@@ -83,26 +83,29 @@ void parareal(const Eigen::SparseMatrix<double>& A,        //* Matrix A (input)
         u_coarse[kk][0] = u;
     }
 
-    LeXInt::timer init_coarse, fine_solver, parareal_iters;
+    LeXInt::timer init_coarse, fine_solver, new_coarse;
 
     //? Initial coarse solve (0th parareal iteration)
     init_coarse.start();
     for (int nn = 0; nn < num_coarse_steps; nn++)
     {
         u_temp = u_coarse[0][nn];
-        coarse(A, u_temp, tol, iters_f, LHS_matrix, rhs_vector, T, num_coarse_steps);
+        coarse(A, u_temp, tol, iters_c, LHS_matrix, rhs_vector, T, num_coarse_steps);
         u_coarse[0][nn+1] = u_temp;
+        iters = iters + iters_c;
     }
     init_coarse.stop();
 
     //* Set parareal solution to current coarse solution
     u_parareal = u_coarse;
 
+    // int converged_till = 0;
+
     //? Parareal iterations
-    parareal_iters.start();
     for (int kk = 0; kk < max_parareal_iters-1; kk++)
     {
         std::cout << std::endl << "Parareal #: " << kk + 1 << std::endl;
+        // std::cout << "Converged till: " << converged_till << std::endl;
 
         //? Fine solve (from previous parareal solution)
         fine_solver.start();
@@ -116,17 +119,23 @@ void parareal(const Eigen::SparseMatrix<double>& A,        //* Matrix A (input)
             fine(A, u_local, tol, iters_f, LHS_matrix_local, rhs_vector_local, T, num_coarse_steps, num_fine_steps_per_coarse);
             
             #pragma omp critical
-            u_fine[nn] = u_local;
+            {
+                u_fine[nn] = u_local;
+                iters = iters + iters_f;
+            }
         }
         fine_solver.stop();
 
         //? New coarse solve
+        new_coarse.start();
         for (int nn = 0; nn < num_coarse_steps; nn++)
         {
             u_temp = u_parareal[kk][nn];
             coarse(A, u_temp, tol, iters_c, LHS_matrix, rhs_vector, T, num_coarse_steps);
             u_coarse[kk+1][nn+1] = u_temp;
+            iters = iters + iters_c;
         }
+        new_coarse.stop();
 
         //* Update parareal solution
         for (int nn = 0; nn < num_coarse_steps; nn++)
@@ -139,14 +148,16 @@ void parareal(const Eigen::SparseMatrix<double>& A,        //* Matrix A (input)
         {
             u_temp = u_parareal[kk+1][nn] - u_parareal[kk][nn];
             u_error[nn] = u_temp.norm()/u_parareal[kk+1][nn].norm();
+
+            u = u_parareal[kk+1][nn+1];
+            // if (u_error[nn] < 1e-6)
+            //     converged_till = nn;
         }
 
-        std::cout << "Error: " << std::endl;
-        for (int nn = 0; nn < num_coarse_steps; nn++)
-        {   
-            std::cout << u_error[nn] << "      ";
-        }
-        std::cout << std::endl;
+        // std::cout << "Error: " << std::endl;
+        // for (int nn = 0; nn < num_coarse_steps; nn++)
+        //     std::cout << u_error[nn] << "      ";
+        // std::cout << std::endl;
 
         if (u_error[num_coarse_steps-1] < 1e-6) 
         {
@@ -154,11 +165,8 @@ void parareal(const Eigen::SparseMatrix<double>& A,        //* Matrix A (input)
             break;
         }
     }
-    parareal_iters.stop();
-  
-
-    std::cout << "Total time elapsed for parareal (s) : " << init_coarse.total() + parareal_iters.total() << std::endl;
-    std::cout << "          Initial Coarse solver (s) : " << init_coarse.total() << std::endl;
-    std::cout << "                    Fine solver (s) : " << fine_solver.total() << std::endl;
-    std::cout << "            Parareal iterations (s) : " << parareal_iters.total() << std::endl;
+    
+    std::cout << "Initial Coarse solve (s)  : " << init_coarse.total() << std::endl;
+    std::cout << "Fine solve (s)            : " << fine_solver.total() << std::endl;
+    std::cout << "New Coarse solve (s)      : " << new_coarse.total() << std::endl << std::endl;
 }

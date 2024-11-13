@@ -40,8 +40,12 @@ int main(int argc, char** argv)
         integrator = argv[5];
 
     string movie = "no";                    // Default param = "no"
-    if (argc == 7)
+    if (argc >= 7)
         movie = argv[6];                    // Set to "yes" to write data for plots/movie
+
+    string parareal_alg = "yes";
+    if (argc >= 8)
+        parareal_alg = argv[7];                    // Set to "yes" to use parareal
 
     int num_threads;                        // # of OpenMP threads
     #pragma omp parallel
@@ -74,17 +78,18 @@ int main(int argc, char** argv)
     //* Initialise additional parameters
     double dx = X[2] - X[1];                              // Grid spacing
     double dy = Y[2] - Y[1];                              // Grid spacing
-    double velocity = 40;                                   // Advection speed
+    double velocity = 10;                                 // Advection speed
 
     //* Temporal parameters
     double dif_cfl = (dx*dx * dy*dy)/(2*dx*dx + 2*dy*dy);   // Diffusion CFL
     double adv_cfl = min(dx/velocity, dy/velocity);         // Advection CFL
     double dt = n_cfl*min(dif_cfl, adv_cfl);                // Step size
+    double T_final = num_time_steps * dt;
 
     double time = 0;                                        // Simulation time elapsed                          
     int time_steps = 0;                                     // # time steps
     int iters = 0;                                          // # of iterations per time step
-    int iters_total = 0;                                    // Total # of iterations during the simulation
+    int iters_serial = 0;                                   // Total # of iterations during the simulation
 
     cout << endl << "N = " << N << ", tol = " << tol << ", Time steps = " << num_time_steps << endl;
     cout << "N_cfl = " << n_cfl << ", CFL: " << min(dif_cfl, adv_cfl) << ", dt = " << dt << endl << endl;
@@ -111,7 +116,7 @@ int main(int argc, char** argv)
     //? Choose problem
     string problem = "Diff_Adv_2D";
     Eigen::SparseMatrix<double> A_diff_adv(N, N);       //* Add diffusion and advection matrices 
-    A_diff_adv = A_dif;
+    A_diff_adv = A_dif + A_adv;
    
     //! Print the matrix (avoid doing this for large matrices)
     // cout << "Diffusion matrix:" << endl << Eigen::MatrixXd(A_dif) << endl << endl;
@@ -146,9 +151,11 @@ int main(int argc, char** argv)
     Eigen::SparseMatrix<double> LHS_matrix(n, n);
 
     LeXInt::timer time_loop, serial_time;
-    LeXInt::timer init_coarse, fine_solver, parareal_iters;
+    LeXInt::timer parareal_time;
 
-    //! Time Loop
+    //? ================================================================================= ?//
+
+    //! Time Loop (Serial Implementation)
     time_loop.start();
 
     cout << "Running the 2D diffusion--advection problem with the " << integrator << " integrator." << endl << endl;
@@ -169,10 +176,6 @@ int main(int argc, char** argv)
         {
             CN(A_diff_adv, u, tol, dt, iters, LHS_matrix, rhs_vector);
         }
-        else if (integrator == "RK2")
-        {
-            RK2(A_diff_adv, u, dt);
-        }
         else
         {
             cout << "Incorrect integrator! Please recheck. Terminating simulations ... " << endl << endl;
@@ -184,7 +187,7 @@ int main(int argc, char** argv)
         //* Update variables
         time = time + dt;
         time_steps = time_steps + 1;
-        iters_total = iters_total + iters;
+        iters_serial = iters_serial + iters;
         
         //! The solution (u) does not have to updated explicitly.
         //! The integrators automatically updates the solution.
@@ -211,55 +214,88 @@ int main(int argc, char** argv)
 
     serial_time.stop();
 
-    cout << "Time elapsed for serial (s)   : " << serial_time.total() << endl << endl;
+    // cout << "# of GMRes iterations for serial   : " << iters_serial << endl;
+    cout << "Time elapsed for serial (s)        : " << serial_time.total() << endl << endl;
 
-    //! Parareal (num_threads = num_time_steps = max_parareal_iters)
-    int num_coarse_steps = num_time_steps;
-    int num_fine_steps_per_coarse = 10;
-    int solver_iters;
-    double T = num_time_steps * dt;
+    //? ================================================================================= ?//
+
+    //! Parareal
+    cout << "Running the 2D diffusion--advection problem with the Parareal algorithm." << endl << endl;
+
+    //? num_threads = num_time_steps = max_parareal_iters
+    int num_coarse_steps = num_threads;
+    int num_fine_steps_per_coarse = atoi(argv[8]);
+
+    int iters_parareal;
     Eigen::VectorXd u_parareal = u_init;
     
-    parareal(A_diff_adv, u_parareal, tol, solver_iters, LHS_matrix, rhs_vector, T, num_coarse_steps, num_fine_steps_per_coarse);
+    cout << "Number of coarse time steps:   " << num_coarse_steps << endl;
+    cout << "Number of fine steps per coarse step:   " << num_fine_steps_per_coarse << endl;
+
+    parareal_time.start();
+    parareal(A_diff_adv, u_parareal, tol, iters_parareal, LHS_matrix, rhs_vector, T_final, num_coarse_steps, num_fine_steps_per_coarse);
+    parareal_time.stop();
+
+    // cout << "# of GMRes iterations for parareal   : " << iters_parareal << endl;
+    cout << "Total time elapsed for parareal (s)  : " << parareal_time.total() << endl << endl;
+    cout << "Speedup (serial to parareal) : " << serial_time.total()/parareal_time.total() << endl;       
+
+    //? ================================================================================= ?//
 
     Eigen::VectorXd u_diff = u - u_parareal;
+    u_diff = u_diff.cwiseAbs();
     cout << endl << "Error wrt to serial: " << u_diff.mean() << endl;
 
     time_loop.stop();
 
     cout << endl << "==================================================" << endl;
-    cout << "Simulation time                : " << time << endl;
-    cout << "Total number of time steps     : " << time_steps << endl;
-    cout << "Number of OpenMP threads used  : " << num_threads << endl;
-    cout << "Total number of iterations     : " << iters_total << endl;
-    cout << "Total time elapsed (s)         : " << time_loop.total() << endl;
+    cout << "Simulation time                         : " << time << endl;
+    cout << "Total number of time steps (serial)     : " << time_steps << endl;
+    cout << "Total time elapsed (s)                  : " << time_loop.total() << endl;
     cout << "==================================================" << endl << endl;
 
+    //? ================================================================================= ?//
 
     //? Create directory to write simulation results/parameters
     int sys_value = system(("mkdir -p ./" + integrator + "/cores_" + to_string(num_threads)).c_str());
     string directory = "./" + integrator + "/cores_" + to_string(num_threads);
-    string results = directory + "/Parameters.txt";
+    string results = directory + "/Params_dt_cfl_" + to_string(n_cfl) + ".txt";
     ofstream params;
     params.open(results);
     params << "Grid points: " << N << endl;
     params << "Step size: " << dt << endl;
-    params << "Tolerance (for implicit methods): " << tol << endl;
+    params << "Tolerance (for iterative methods): " << tol << endl;
     params << "Simulation time: " << time << endl;
-    params << "Total number of time steps: " << time_steps << endl;
-    params << "Number of OpenMP threads: " << num_threads << endl;
     params << endl;
-    params << "Total iterations (for implicit methods): " << iters_total << endl;
-    params << setprecision(16) << "Runtime (s): " << time_loop.total() << endl;
+    params << "Serial" << endl;
+    params << "Total number of time steps: " << time_steps << endl;
+    params << "Total iterations (serial): " << iters_serial << endl;
+    params << "Serial Runtime (s): " << serial_time.total() << endl;
+    params << endl;
+    params << "Parareal " << endl;
+    params << "Number of OpenMP threads: " << num_threads << endl;
+    params << "Number of coarse time steps: " << num_coarse_steps << endl;
+    params << "Number of fine steps per coarse step: " << num_fine_steps_per_coarse << endl;
+    params << "Total iterations (parareal): " << iters_parareal << endl;
+    params << "Parareal Runtime (s): " << parareal_time.total() << endl;
+    params << "Speedup (serial to parareal) : " << serial_time.total()/parareal_time.total() << endl;
     params.close();
 
     //? Create directory to write final simulation data
-    string final_data = directory + "/dt_cfl_" + to_string(n_cfl) + "_data.txt";
+    string final_data = directory + "/dt_cfl_" + to_string(n_cfl) + "_serial.txt";
     ofstream data;
     data.open(final_data); 
     for(int ii = 0; ii < N; ii++)
     {
         data << setprecision(16) << u[ii] << endl;
+    }
+    data.close();
+
+    final_data = directory + "/dt_cfl_" + to_string(n_cfl) + "_parareal.txt";
+    data.open(final_data); 
+    for(int ii = 0; ii < N; ii++)
+    {
+        data << setprecision(16) << u_parareal[ii] << endl;
     }
     data.close();
 

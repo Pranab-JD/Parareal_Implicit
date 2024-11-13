@@ -40,6 +40,27 @@ void GMRes(const Eigen::SparseMatrix<double>& A,        //* Matrix A (input)
     iters = solver.iterations();
 }
 
+void LU(const Eigen::SparseMatrix<double>& A,     //* Matrix A (input)
+        const Eigen::VectorXd& b,                 //* RHS vector b (input)
+        Eigen::VectorXd& x                        //* Solution vector x (output)
+        ) 
+{
+    //? Initialise solver
+    Eigen::SparseLU<Eigen::SparseMatrix<double>> solver;
+    solver.compute(A);
+    if (solver.info() != Eigen::Success) 
+    {
+        std::cerr << "Decomposition failed!" << std::endl;
+    }
+
+    //? Compute solution
+    x = solver.solve(b);
+    if (solver.info() != Eigen::Success) 
+    {
+        std::cerr << "Solving failed!" << std::endl;
+    }
+}
+
 void implicit_Euler(const Eigen::SparseMatrix<double>& A,        //* Matrix A (input)
                     Eigen::VectorXd& u,                          //* Solution vector x (output)
                     double& tol,                                 //* Desired accuracy (input)
@@ -60,7 +81,9 @@ void implicit_Euler(const Eigen::SparseMatrix<double>& A,        //* Matrix A (i
     rhs_vector = u;
 
     //? Solve using GMRes (Ax = b :: LHS_matrix * u = rhs_vector)
-    GMRes(LHS_matrix, rhs_vector, u, tol, iters);
+    LU(LHS_matrix, rhs_vector, u);
+
+    // GMRes(LHS_matrix, rhs_vector, u, tol, iters);
 }
 
 void CN(const Eigen::SparseMatrix<double>& A,              //* Matrix A (input)
@@ -83,20 +106,7 @@ void CN(const Eigen::SparseMatrix<double>& A,              //* Matrix A (input)
     rhs_vector = u + 0.5*dt*(A*u);
 
     //? Solve using GMRes (Ax = b :: LHS_matrix * u = rhs_vector)
-    GMRes(LHS_matrix, rhs_vector, u, tol, iters);
-}
+    LU(LHS_matrix, rhs_vector, u);
 
-void RK2(const Eigen::SparseMatrix<double>& A,
-               Eigen::VectorXd& u,
-         const double& dt)
-{
-    //? Internal stage 1: k1 = dt * RHS(u)
-    Eigen::VectorXd k1 = dt*A*u;                    //* k1 = RHS(u) = du/dt
-
-    //? Internal stage 2: k2 = dt * RHS(u + k1)
-    Eigen::VectorXd u_temp = u + k1;
-    Eigen::VectorXd k2 = dt*A*u_temp;               //* k2 = RHS(u + k1) = RHS(u_sol) 
-
-    //? u_rk2 = u + 1./2.*(k1 + k2)
-    u = u + 0.5*(k1 + k2);
+    // GMRes(LHS_matrix, rhs_vector, u, tol, iters);
 }
