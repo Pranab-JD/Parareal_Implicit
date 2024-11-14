@@ -154,10 +154,10 @@ void parareal(const Eigen::SparseMatrix<double>& A,        //* Matrix A (input)
             //     converged_till = nn;
         }
 
-        // std::cout << "Error: " << std::endl;
-        // for (int nn = 0; nn < num_coarse_steps; nn++)
-        //     std::cout << u_error[nn] << "      ";
-        // std::cout << std::endl;
+        std::cout << "Error: " << std::endl;
+        for (int nn = 0; nn < num_coarse_steps; nn++)
+            std::cout << u_error[nn] << "      ";
+        std::cout << std::endl;
 
         if (u_error[num_coarse_steps-1] < 1e-6) 
         {

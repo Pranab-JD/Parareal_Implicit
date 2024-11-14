@@ -11,7 +11,7 @@
 #include "functions.hpp"
 
 //? Problems
-#include "Dif_Adv_2D.hpp"
+#include "Dif_Adv_1D.hpp"
 
 //? Solvers
 #include "Implicit.hpp"
@@ -34,18 +34,8 @@ int main(int argc, char** argv)
     double n_cfl = atof(argv[2]);           // dt = n_cfl * dt_cfl
     double tol = atof(argv[3]);             // User-specified tolerance
     int num_time_steps = atoi(argv[4]);     // Final simulation time
-    
-    string integrator = "Implicit_Euler";   // Integrator
-    if (argc >= 6)
-        integrator = argv[5];
-
-    string movie = "no";                    // Default param = "no"
-    if (argc >= 7)
-        movie = argv[6];                    // Set to "yes" to write data for plots/movie
-
-    string parareal_alg = "yes";
-    if (argc >= 8)
-        parareal_alg = argv[7];                    // Set to "yes" to use parareal
+    string integrator = argv[5];            // Integrator
+    string movie = argv[6];                 // Write data to files every N time steps: "yes" or "no"
 
     int num_threads;                        // # of OpenMP threads
     #pragma omp parallel
@@ -57,32 +47,27 @@ int main(int argc, char** argv)
     //* ----------------------------------------------------------------- *//
 
     //* Initialise parameters
-    int n = pow(2, index);                          // # grid points (1D)
-    int N = n*n;                                    // # grid points (2D)
+    int N = pow(2, index);                          // # grid points (1D)
     double xmin = -1;                               // Left boundary (limit)
     double xmax =  1;                               // Right boundary (limit)
-    double ymin = -1;                               // Left boundary (limit)
-    double ymax =  1;                               // Right boundary (limit)
-    vector<double> X(n);                            // Array of grid points
-    vector<double> Y(n);                            // Array of grid points
+    vector<double> X(N);                            // Array of grid points
     Eigen::VectorXd u_init(N);                      // Initial condition
 
-    //* Set up X, Y arrays and initial condition
+    //* Set up X array and initial condition
     #pragma omp parallel for
-    for (int ii = 0; ii < n; ii++)
+    for (int ii = 0; ii < N; ii++)
     {
-        X[ii] = xmin + ii*(xmax - xmin)/n;
-        Y[ii] = ymin + ii*(ymax - ymin)/n;
+        X[ii] = xmin + ii*(xmax - xmin)/N;
+        u_init(ii) = 1 + 10*exp(-((X[ii] + 0.5)*(X[ii] + 0.5))/0.02);
     }
 
     //* Initialise additional parameters
     double dx = X[2] - X[1];                              // Grid spacing
-    double dy = Y[2] - Y[1];                              // Grid spacing
     double velocity = 10;                                 // Advection speed
 
     //* Temporal parameters
-    double dif_cfl = (dx*dx * dy*dy)/(2*dx*dx + 2*dy*dy);   // Diffusion CFL
-    double adv_cfl = min(dx/velocity, dy/velocity);         // Advection CFL
+    double dif_cfl = dx*dx;                                 // Diffusion CFL
+    double adv_cfl = dx/velocity;                           // Advection CFL
     double dt = n_cfl*min(dif_cfl, adv_cfl);                // Step size
     double T_final = num_time_steps * dt;
 
@@ -94,50 +79,25 @@ int main(int argc, char** argv)
     cout << endl << "N = " << N << ", tol = " << tol << ", Time steps = " << num_time_steps << endl;
     cout << "N_cfl = " << n_cfl << ", CFL: " << min(dif_cfl, adv_cfl) << ", dt = " << dt << endl << endl;
 
-    //? Identity matrix
-    Eigen::SparseMatrix<double> I_N(n, n);
-    I_N.setIdentity();
-
     //? Diffusion
-    Eigen::SparseMatrix<double> Dif_xx(n, n);
-    Eigen::SparseMatrix<double> Dif_yy(n, n);
     Eigen::SparseMatrix<double> A_dif(N, N);
 
     //? Advection
-    Eigen::SparseMatrix<double> Adv_x(n, n);
-    Eigen::SparseMatrix<double> Adv_y(n, n);
     Eigen::SparseMatrix<double> A_adv(N, N);
 
     //? Create an instance of the RHS class
-    RHS_Dif_Adv_2D RHS(n, dx, dy, velocity);
-    RHS.Diffusion_matrix(Dif_xx, Dif_yy, I_N, A_dif);
-    RHS.Advection_matrix(Adv_x, Adv_y, I_N, A_adv);
+    RHS_Dif_Adv_1D RHS(N, dx, velocity);
+    RHS.Diffusion_matrix(A_dif);
+    // RHS.Advection_matrix(Adv_x, Adv_y, I_N, A_adv);
 
     //? Choose problem
     string problem = "Diff_Adv_2D";
     Eigen::SparseMatrix<double> A_diff_adv(N, N);       //* Add diffusion and advection matrices 
-    A_diff_adv = A_dif + A_adv;
+    A_diff_adv = A_dif;
    
     //! Print the matrix (avoid doing this for large matrices)
     // cout << "Diffusion matrix:" << endl << Eigen::MatrixXd(A_dif) << endl << endl;
     // cout << "Advection matrix:" << endl << Eigen::MatrixXd(A_adv) << endl << endl;
-
-    if (problem == "Diff_Adv_2D")
-    {
-        //? Initial condition
-        #pragma omp parallel for
-        for (int ii = 0; ii < n; ii++)
-        {
-            for (int jj = 0; jj< n; jj++)
-            {
-                u_init(n*ii + jj) = 1 + 10*exp(-((X[ii] + 0.5)*(X[ii] + 0.5) + (Y[jj] + 0.5)*(Y[jj] + 0.5))/0.02);
-            }
-        }
-    }
-    else
-    {
-        cout << "Undefined problem! Please check that you have entered the correct problem." << endl;
-    }
 
     //! Create directories (for movies)
     if (movie == "yes")
@@ -148,7 +108,7 @@ int main(int argc, char** argv)
 
     //? Create matrices and vectors for implicit integrators
     Eigen::VectorXd rhs_vector(N);
-    Eigen::SparseMatrix<double> LHS_matrix(n, n);
+    Eigen::SparseMatrix<double> LHS_matrix(N, N);
 
     LeXInt::timer time_loop, serial_time;
     LeXInt::timer parareal_time;
@@ -224,7 +184,7 @@ int main(int argc, char** argv)
 
     //? num_threads = num_time_steps = max_parareal_iters
     int num_coarse_steps = num_threads;
-    int num_fine_steps_per_coarse = atoi(argv[8]);
+    int num_fine_steps_per_coarse = atoi(argv[7]);
 
     int iters_parareal;
     Eigen::VectorXd u_parareal = u_init;
