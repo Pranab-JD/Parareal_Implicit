@@ -88,12 +88,12 @@ int main(int argc, char** argv)
     //? Create an instance of the RHS class
     RHS_Dif_Adv_1D RHS(N, dx, velocity);
     RHS.Diffusion_matrix(A_dif);
-    // RHS.Advection_matrix(Adv_x, Adv_y, I_N, A_adv);
+    RHS.Advection_matrix(A_adv);
 
     //? Choose problem
     string problem = "Diff_Adv_2D";
     Eigen::SparseMatrix<double> A_diff_adv(N, N);       //* Add diffusion and advection matrices 
-    A_diff_adv = A_dif;
+    A_diff_adv = A_dif + A_adv;
    
     //! Print the matrix (avoid doing this for large matrices)
     // cout << "Diffusion matrix:" << endl << Eigen::MatrixXd(A_dif) << endl << endl;
@@ -203,8 +203,8 @@ int main(int argc, char** argv)
     //? ================================================================================= ?//
 
     Eigen::VectorXd u_diff = u - u_parareal;
-    u_diff = u_diff.cwiseAbs();
-    cout << endl << "Error wrt to serial: " << u_diff.mean() << endl;
+    // u_diff = u_diff.cwiseAbs();
+    cout << endl << "Error wrt to serial: " << u_diff.norm()/N << endl;
 
     time_loop.stop();
 
