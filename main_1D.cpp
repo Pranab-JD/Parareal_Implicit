@@ -63,7 +63,7 @@ int main(int argc, char** argv)
 
     //* Initialise additional parameters
     double dx = X[2] - X[1];                              // Grid spacing
-    double velocity = 10;                                 // Advection speed
+    double velocity = 0.2;                                 // Advection speed
 
     //* Temporal parameters
     double dif_cfl = dx*dx;                                 // Diffusion CFL
@@ -203,7 +203,6 @@ int main(int argc, char** argv)
     //? ================================================================================= ?//
 
     Eigen::VectorXd u_diff = u - u_parareal;
-    // u_diff = u_diff.cwiseAbs();
     cout << endl << "Error wrt to serial: " << u_diff.norm()/N << endl;
 
     time_loop.stop();

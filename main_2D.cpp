@@ -68,7 +68,7 @@ int main(int argc, char** argv)
     //* Initialise additional parameters
     double dx = X[2] - X[1];                              // Grid spacing
     double dy = Y[2] - Y[1];                              // Grid spacing
-    double velocity = 10;                                 // Advection speed
+    double velocity = 0.2;                                 // Advection speed
 
     //* Temporal parameters
     double dif_cfl = (dx*dx * dy*dy)/(2*dx*dx + 2*dy*dy);   // Diffusion CFL
@@ -115,7 +115,6 @@ int main(int argc, char** argv)
     if (problem == "Diff_Adv_2D")
     {
         //? Initial condition
-        #pragma omp parallel for
         for (int ii = 0; ii < n; ii++)
         {
             for (int jj = 0; jj< n; jj++)
@@ -233,8 +232,7 @@ int main(int argc, char** argv)
     //? ================================================================================= ?//
 
     Eigen::VectorXd u_diff = u - u_parareal;
-    u_diff = u_diff.cwiseAbs();
-    cout << endl << "Error wrt to serial: " << u_diff.mean() << endl;
+    cout << endl << "Error wrt to serial: " << u_diff.norm()/u.norm() << endl;
 
     time_loop.stop();
 
