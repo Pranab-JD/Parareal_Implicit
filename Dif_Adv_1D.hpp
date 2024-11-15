@@ -47,7 +47,7 @@ struct RHS_Dif_Adv_1D:public Problems_1D
 
         //* Set the values into the sparse matrices
         Dif_xx.setFromTriplets(D_x.begin(), D_x.end());
-        Dif_xx = Dif_xx/dx*dx;
+        Dif_xx = Dif_xx/(dx*dx);
     }
 
     void Advection_matrix(Eigen::SparseMatrix<double>& Adv_x)
