@@ -16,7 +16,7 @@ from Parareal import *
 
 ### ============================================================================ ###
 
-N = 2**7
+N = 2**10
 X = np.linspace(-1, 1, N, endpoint=False)
 Y = np.linspace(-1, 1, N, endpoint=False)
 dx = X[2] - X[1]
@@ -53,13 +53,13 @@ adv_cfl = min(dx/abs(velocity), dy/abs(velocity))
 ###* Temporal parameters
 N_cfl = 2.0
 dt = N_cfl * min(dif_cfl, adv_cfl)
-num_time_steps = 1000        # Simulation time
+num_time_steps = 100        # Simulation time
 T = num_time_steps * dt
-tol = 1e-8
+tol = 1e-10
 
 ###* Parareal parameters
-num_coarse_steps = 10
-num_fine_steps_per_coarse = 4
+num_coarse_steps = 4
+num_fine_steps_per_coarse = 5
 
 ### -------------------------------------- ###
 
@@ -85,6 +85,6 @@ if __name__ == "__main__":
     plt.imshow(u_serial.reshape(N, N), origin = "lower", cmap = cm.plasma, extent = [-1, 1, -1, 1], aspect = 'equal')
     plt.colorbar()
     plt.subplot(1, 2, 2)
-    plt.imshow(u_parareal[num_coarse_steps-1, :].reshape(N, N), origin = "lower", cmap = cm.plasma, extent = [-1, 1, -1, 1], aspect = 'equal')
+    plt.imshow(u_parareal[num_coarse_steps, :].reshape(N, N), origin = "lower", cmap = cm.plasma, extent = [-1, 1, -1, 1], aspect = 'equal')
     plt.colorbar()
     plt.show()

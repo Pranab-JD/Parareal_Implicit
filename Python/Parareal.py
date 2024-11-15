@@ -65,9 +65,8 @@ def parareal(T, u_init, A, num_coarse_steps, num_fine_steps_per_coarse, tol):
         for nn in range(0, num_coarse_steps+1):
             u_error[nn] = np.linalg.norm(u_parareal[k+1, nn, :] - u_parareal[k, nn, :])/np.linalg.norm(u_parareal[k+1, nn, :])
 
-        print("Error: ", u_error)
-
-        if u_error[num_coarse_steps] < 1e-6:
+        if np.all(u_error < 1e-6):
+            print("Error: ", u_error)
             print(f"Convergence reached after {k+1} iterations.")
             break
 
